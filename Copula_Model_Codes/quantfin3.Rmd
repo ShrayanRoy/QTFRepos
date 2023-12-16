@@ -1,0 +1,995 @@
+---
+title: "**Analysis of Cryptocurrency Returns Using Quantile & Expectile Based Copula HMM**"
+author: "Adrija Saha(MD2203) & Shrayan Roy(MD2220), M.Stat 2nd Year"
+mainfont: Roboto
+monofont: Consolas
+geometry: margin=3cm
+output: 
+  pdf_document:
+    toc: yes
+    number_sections: false
+urlcolor: blue
+fontsize: 10pt
+---
+\newpage
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+The cryptocurrency market, characterized by its dynamic nature and inherent volatility, has become a focal point for researchers seeking to understand its complex dynamics and interactions with traditional financial assets. Building upon the theoretical framework introduced in the paper titled *Quantile and expectile copula-based hidden Markov regression models for the analysis of the cryptocurrency market* (https://arxiv.org/abs/2307.06400), this extended assignment aims to implement and apply the proposed models to a real-world dataset.
+
+# Background
+
+The cryptocurrency market, with the emergence of various crypto assets following Bitcoin's trajectory, has experienced significant fluctuations, notably during the 2017 boom and subsequent 2018 crash. The COVID-19 pandemic in 2020 further heightened market volatility, raising questions about the behavior of cryptocurrencies during crises and their impact on global financial markets.
+
+While existing literature has explored aspects such as long memory, efficiency, and hedging properties of cryptocurrencies, the paper under consideration introduces a novel approach. It employs hidden Markov regression models and state-dependent elliptical copulas to capture unobserved heterogeneity and evolving dependency structures in cryptocurrency returns.
+
+# Objective
+
+Here we aim to implement the *Copula Quantile Hidden Markov Model* (CQHMM) and *Copula Expectile Hidden Markov Model* (CEHMM) on a real dataset. By doing so, we seek to analyze the dynamic relationships among multiple cryptocurrency returns, considering the evolving market conditions and dependencies introduced by the state-dependent copulas.
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+suppressPackageStartupMessages(library(quantmod))
+suppressPackageStartupMessages(library(tidyquant))
+suppressPackageStartupMessages(library(crypto2))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(markovchain))
+suppressPackageStartupMessages(library(quantreg))
+suppressPackageStartupMessages(library(copula))
+suppressPackageStartupMessages(library(ald))
+suppressPackageStartupMessages(library(GGally))
+defined_theme <- theme(plot.subtitle = element_text(family = "mono",size = 8,
+                                                    face = "bold",hjust = 0.01),axis.title = element_text(family = "serif"),
+                       axis.text = element_text(size = 8),plot.title = element_text(family = "sans",
+                                                                                    colour = "red", hjust = -0.01),legend.text = element_text(size = 8,family = "serif"), 
+                       legend.title = element_text(family = "serif"),legend.background = element_blank(),
+                       legend.box.background = element_rect(colour = "black"))
+
+```
+
+# Data Description
+
+Following the setup of model described in the original paper. We will need data on return of cryptocurrencies and also data on some fixed covariates. Here we want to see the interaction of cryptocurrencies market and traditional assests, like - Stocks,Bonds and Indices. So we will consider some representatives of the traditional assests. Fitting a copula based regression model will help us to understand the significance of traditional assets on cryptocurrencies. Let us see the different cryptocurrencies available in this date. We will use `crypto2` package in R for extracting cryptocurrency data. The below code extracts all currently active cryptocurrencies. 
+
+```{r,warning=FALSE,message=FALSE}
+active_list <- crypto_list(only_active = TRUE)
+coin_list_2022 <- active_list %>% dplyr::filter(first_historical_data<="2022-12-31",
+                                                last_historical_data>="2022-01-01")
+head(coin_list_2022,7)
+```
+
+We will work with top five cryptocurrencies(top w.r.t ranking) i.e. Bitcoin, XRP, Tether USDt, Ethereum and BNB, as we can see below.
+
+```{r}
+#First 5 ranking bitocins
+ranker_list <- coin_list_2022[coin_list_2022$rank%in%c(1,2,3,4,5),]
+ranker_list
+```
+```{r,echo=F,message=FALSE}
+#extracting data
+ranker_data <- crypto_history(coin_list = ranker_list,
+                  start_date = "20170725", end_date="20231031")
+ranker_data <- ranker_data[,c(5,1,7,8,9,10,11)]
+ranker_data$timestamp <- as.Date(ranker_data$timestamp)
+BTC_data <- ranker_data[ranker_data$symbol == "BTC",]
+ETH_data <- ranker_data[ranker_data$symbol == "ETH",]
+USDT_data <- ranker_data[ranker_data$symbol == "USDT",]
+BNB_data <- ranker_data[ranker_data$symbol == "BNB",]
+XRP_data <- ranker_data[ranker_data$symbol == "XRP",]
+
+BTC_data <- drop_na(BTC_data)
+ETH_data <- drop_na(ETH_data)
+USDT_data <- drop_na(USDT_data)
+BNB_data <- drop_na(BNB_data)
+XRP_data <- drop_na(XRP_data)
+```
+
+For these cryptocurrencies, we will consider daily data from 25th July,2017 to 31st October,2023. Since, Crypto market is open $24\times7$. So, we have data for all these dates. We will consider the data on S&P 500, USDX, WTI Crude Oil and Gold. For extracting data on these traditional assets, we will use `tidyquant` and `quantmod` packages of R. The below code extracts data on these assets.
+
+```{r,warning = F,message = F}
+symbols <- c("^GSPC", "DX-Y.NYB", "CL=F", "GC=F")
+start_date <- "2017-07-25";end_date <- "2023-10-31"
+getSymbols(symbols, src = "yahoo", from = start_date, to = end_date,
+           auto.assign = TRUE)
+```
+
+```{r,echo=FALSE,warning = F,message = F}
+SNP500_data <- tq_get(x = symbols[1],from = start_date, to = end_date)
+USDX_data <- tq_get(x = symbols[2],from = start_date, to = end_date)
+WTI_data <- tq_get(x = symbols[3],from = start_date, to = end_date)
+Gold_data <- tq_get(x = symbols[4],from = start_date, to = end_date)
+
+#=========================================================================
+SNP500_data <- drop_na(SNP500_data)
+USDX_data <- drop_na(USDX_data)
+WTI_data <- drop_na(WTI_data)
+Gold_data <- drop_na(Gold_data)
+
+common_time <- as.Date(Reduce(intersect,list(SNP500_data$date,USDX_data$date,WTI_data$date,Gold_data$date)))
+SNP500_data <- SNP500_data[SNP500_data$date%in%common_time,]
+USDX_data <- USDX_data[USDX_data$date%in%common_time,]
+WTI_data <- WTI_data[WTI_data$date%in%common_time,]
+Gold_data <- Gold_data[Gold_data$date%in%common_time,]
+
+BTC_data <- BTC_data[BTC_data$timestamp%in%common_time,]
+ETH_data <- ETH_data[ETH_data$timestamp%in%common_time,]
+USDT_data <- USDT_data[USDT_data$timestamp%in%common_time,]
+BNB_data <- BNB_data[BNB_data$timestamp%in%common_time,]
+XRP_data <- XRP_data[XRP_data$timestamp%in%common_time,]
+```
+
+We note that like crypto market, stock market is not always open. So we will consider the common times points only. For a fixed time point t, we denote the data on cryptocurrencies by the following vector $\boldsymbol{Y_t} = (Y_{t1},Y_{t2},Y_{t3},Y_{t4},Y_{t5})^{T}$. Where, $Y_{t1},Y_{t2},Y_{t3},Y_{t4} \ \text{and} \ Y_{t5}$ respectively denote the return of Bitcoin,Ethereum,USDT,BNB and XRP at time t and data on fixed covariate (fixed because we know it at time t before observing $\boldsymbol{Y_t}$) by $\boldsymbol{x_t} = (1,x_{t1},x_{t2},x_{t3},x_{t4})$. Where, $x_{t1},x_{t2},x_{t3} \ \text{and} \ x_{t4}$ respectively denote the return of S&P 500, USDX, WTI Crude Oil and Gold at time point t-1 i.e. previous time point. We will model the joint distribution of $\boldsymbol{Y_t}$ by eliptical copulas, Like -  Normal, t Copula and will model the quantile or expectile by the $\boldsymbol{x_t}$. 
+
+After doing necessary data cleaning and adjustments we get the following data frame. 
+```{r,echo=FALSE,warning = F,message = F}
+
+Crypto_assests <- bind_rows(BTC_data,ETH_data,USDT_data,BNB_data,XRP_data)
+Crypto_assests <- Crypto_assests %>% group_by(symbol) %>%
+                          mutate(returns = (close / lag(close)) - 1)
+Traditional_assests <- bind_rows(SNP500_data,USDX_data,WTI_data,Gold_data)
+Traditional_assests <- Traditional_assests %>% group_by(symbol) %>%
+                      mutate(returns = (close / lag(close)) - 1)
+#relation between crypto assests
+Crypt_colwise <- Crypto_assests %>% select(timestamp,symbol,returns) %>% pivot_wider(names_from = symbol, values_from = returns)
+Crypt_colwise <- Crypt_colwise[-1,]
+Trad_colwise <- Traditional_assests %>% select(date,symbol,returns) %>% pivot_wider(names_from = symbol, values_from = returns)
+Trad_colwise <- Trad_colwise[-1,]
+```
+
+```{r,echo=FALSE}
+our_data <- data.frame(t = 1:nrow(Crypt_colwise),Crypt_colwise[,2:6],Trad_colwise[,2:5])
+str(our_data)
+```
+
+second to sixth columns give return data on cryptocurrencies and the last four columns give return data on traditional assets.
+
+# Exploratory Data Analysis
+
+In the context of implementing Copula Quantile Hidden Markov Models (CQHMM) and Copula Expectile Hidden Markov Models (CEHMM) on cryptocurrency returns, Exploratory Data Analysis (EDA) plays a pivotal role. EDA is essential for understanding the inherent characteristics of the dataset, identifying patterns, and recognizing potential challenges. Through graphical and statistical techniques, EDA facilitates the identification of outliers, trends, and distributions within cryptocurrency returns. Moreover, EDA provides insights into the temporal dynamics and relationships among different cryptocurrencies, aiding in the formulation of informed hypotheses for the subsequent model implementation. It serves as a crucial preliminary step, guiding researchers in tailoring the models to capture the nuanced behaviors of cryptocurrency markets, thus enhancing the robustness and relevance of the analysis.
+
+As a initial step, Let's see the descriptive statistics.
+
+```{r,echo=FALSE,warning=FALSE}
+summary(our_data[,-1])
+```
+The above summaries give us important understanding about the spread of data points. We observe that for all currencies/stocks, the minimum return is always negative. among the cyptocurrencies BNB has minimum return, while the highest is for BNB only. Let's look at some usual plots/charts related to cryptocurrencies.The plots show the dependence structure of the returns of the five mentioned cryptocurrencies, which indicates the use of copula to capture or model these dependency structures.
+
+```{r,warning=FALSE,echo=FALSE,out.width='75%',fig.align='center',echo=FALSE}
+#opening prices
+g1 = ggplot(Crypto_assests, aes(x = timestamp ,y = open/100,color = symbol)) + 
+  geom_line(size = 0.8) + 
+  ggtitle("Crypto Currency Opening price series") + 
+  theme(legend.position = "top") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  labs(x = "Date", y = "Opening Prices/100",color = "Currencies", caption = "Adi") +
+  scale_x_date(date_labels = "%b %y", date_breaks = "6 months") +  theme_bw(14) + defined_theme
+```
+
+
+```{r,warning=FALSE,echo=FALSE,out.width='75%',fig.align='center',echo=FALSE}
+#closing prices
+g2 = ggplot(Crypto_assests, aes(x = timestamp ,y = close/100,color = symbol)) + 
+  geom_line(size = 0.8) + 
+  ggtitle("Crypto Currency Closing price series") + 
+  theme(legend.position = "top") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  labs(x = "Date", y = "Closing Prices/100",color = "Currencies", caption = "Adi") +
+  scale_x_date(date_labels = "%b %y", date_breaks = "6 months") +  theme_bw(14) + defined_theme
+```
+
+
+```{r,warning=FALSE,echo=FALSE,out.width='75%',fig.align='center',echo=FALSE}
+#high prices
+g3 = ggplot(Crypto_assests, aes(x = timestamp ,y = high/100,color = symbol)) + 
+  geom_line() + 
+  ggtitle("Crypto Currency Highest price series") + 
+  theme(legend.position = "top") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  labs(x = "Date", y = "Highest Prices/100",color = "Currencies", caption = "Adi") +
+  scale_x_date(date_labels = "%b %y", date_breaks = "6 months") +  theme_bw(14) + defined_theme
+```
+
+```{r,warning=FALSE,echo=FALSE,fig.width=13,fig.height = 9,fig.align='center',echo=FALSE,fig.cap="Plot of Opening, Closing, Highest and Returns different cryptocurrencies"}
+#returns
+g4 = ggplot(Crypto_assests, aes(x = timestamp ,y = returns,color = symbol)) + 
+  geom_line() + 
+  ggtitle("Crypto Currency Returns") + 
+  theme(legend.position = "top") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  labs(x = "Date", y = "Returns",color = "Currencies", caption = "Adi") +
+  scale_x_date(date_labels = "%b %y", date_breaks = "6 months") +  theme_bw(14) + defined_theme
+
+ggpubr::ggarrange(g1,g2,g3,g4)
+```
+
+```{r,warning=FALSE,echo=FALSE,out.width='75%',fig.align='center',echo=FALSE,fig.cap="Paiwise Scatterplots of five cryptocurrency returns"}
+ggpairs(Crypt_colwise,columns = 2:6) + defined_theme + theme_bw(14)
+
+```
+
+We recognize the typical characteristics of this market, i.e. high volatility and sudden waves of exponential price increases. Daily log-returns of the five cryptocurrencies confirm their high volatility, a strong degree of comovement, and show the typical volatility clustering in common with other traditional financial assets. We observe volatility jumps not only during the first crypto bubble but also during the financial market crash caused by the COVID-19 pandemic and right after Biden’s election at the end of 2020, confirming that crypto investors' reactions do not differ from the behavior of investors in traditional financial markets.
+
+\newpage
+
+# Fiting The Proposed Model
+
+We will fit the proposed model in R. But there is no built in package available for this. We will rather write our own function. We first recall the parameters of our model. Following the notation of original paper. The parameters of the model are $\boldsymbol{\theta}=(\beta_1,...,\beta_K,\sigma_1,...,\sigma_K,\pi,\Pi,\eta_1,...,\eta_K)$. For Gaussian Copula, $\eta_k$$=(\Omega_k^\Phi)$ and For $t$ Copula, $\eta_k$$=(\Omega_k^\Psi,\nu_k)$, k = 1,2,...,K. Where $K$ is the number of states of hidden markov model. 
+
+To estimate the model parameters, we need to maximize the surrogate function w.r.t to $\theta$ - 
+
+$$Q(\theta|\theta^{(h)}) = \sum_{k=1}^K \gamma_1^{(h)}(k)log\ \pi_k + \sum_{t=1}^T \sum_{k = 1}^K \sum_{j=1}^K \xi_i^{(h)}(j,k)log \ \pi_{k|j} + \sum_{t=1}^T \sum_{k = 1}^K \gamma_t^{(h)}(k)log f_{Y_t}(y_t|x_t,S_t=k)$$
+Where, $\gamma_t^{(h)}(k)$ and $\xi_i^{(h)}(j,k)$ are quantities depending upon *forward* and *backward* probabilities. Such quantities can be effectively find out using *Forward-Backward algorithm* and $S_t$ denotes markov chain of the hidden markov model.
+
+
+### Parameter Initialization:
+
+Before starting parameter estimation, we need to initialize parameter values i.e. the $\theta$ vector. Following Maruotti et al. (2021) and Merlo et al. (2022), for fixed $\boldsymbol{\tau}$ and $K$ we initialize the EM algorithm by providing the initial states partition, $\{ S^{(0)}_t \}_{t = 1}^{T}$ according to a multinomial distribution with probabilities $1/K$. From the generated partition, the elements of $\Pi^{(0)}$ are computed as proportions of transition, while we obtain regression parameters $\boldsymbol{\beta^{(0)}}$ and $\boldsymbol{\sigma^{(0)}}$ by fitting univariate mean and median regressions on the observations within state $k$ for the CQHMM and CEHMM, respectively. The state-dependent correlation matrices of the copula are set equal to the empirical correlation matrices computed on observations in the k-th state, while the initial value for the degrees of freedom of the t copula is $\nu^{(0)} = \nu^{(0)}_k  = 5$ for all $k = 1, \dots , K$. Once we computed the ML estimates of the model parameters, to estimate the standard errors we employ the parametric bootstrap scheme of Visser et al. (2000).
+
+### Baum-Welch Algorithm:
+
+Given the initial parameter values, we need to start finding the quantities $\gamma_t^{(h)}(k)$ and $\xi_i^{(h)}(j,k)$. This can be found using **Baum-Welch Algorithm**. 
+
+$$\gamma_{i}(t)=P(s_{t}=i|y_1,..,y_T,\theta^{(h)})=\frac{\alpha_{i}(t)\beta_{i}(t)}{\sum_{j=1}^{T}\alpha_{j}(t)\beta_{j}(t)}$$
+$$\xi_{jk}(t)=P(s_{t}=k,s_{t-1}=j| y_1,...y_T,\theta^{(h)})={\frac{\alpha_{k}(t-1)m_{jk}\beta_{k}(t) g_{k}(y_{t})}{\sum_{i=1}^{T}\sum_{j=1}^{T}\alpha_{k}(t-1)m_{jk}\beta_{k}(t) g_{k}(y_{t})}}$$
+Where, $\alpha_j(t)$ and $\beta_j(t)$ are found using forward and backward algorithm. $m_{jk} = P(S_t = k|S_{t-1} = j)$ and $g_k(.)$ denote the emission distribution. i.e. distribution of $y_t$ given $S_t = k$ and also $\boldsymbol{x_t}$. Details of this algorithm is available here https://mzaradzki.github.io/probabilistic-javascript/demos/hmm.html. 
+
+# Results
+
+We fit the proposed CQHMM using t copulas for values of K = 2,3. For ease of comparison between the two models, the copula function and K are selected for $\tau = \tau_j = 0.05/0.50/0.95, j = 1,...,d.$ Then, in the analysis, we have kept this choice fixed. In order to clearly identify high and low volatility market conditions, we use K = 2, which is supported by the parsimonious criteria for both CQHMM and CEHMM, together with a t copula. From a graphical perspective, the figures report the scatterplots and the marginal densities colored according to the estimated posterior probability of class membership, $\max_k \ \gamma_t(k)$.
+
+First we present results for $K = 2$
+
+## $\tau_i = 0.05$, $\nu_k = 5$ and $K = 2$ 
+
+### State-1
+```{r,echo=FALSE,warning=FALSE,fig.width=13,fig.height = 6,fig.align='center'}
+
+table1= list(matrix(c(-0.08464487, -0.05099835, -0.03605412, -0.1088325, -0.07112603,
+                      -0.23009129, 4.22150095, -0.39297913, 5.3651761, 12.95564717,
+                      5.26325044, 10.30685015, -1.26710488, 13.8621074, 36.92163924,
+                      0.32139477, -3.13926483, 0.23187852, -2.4034287, -9.11933810,
+                      -4.54014096, -12.43631991, 0.93017307, -15.8093942, -21.04758408),byrow=T,nrow=5),
+             matrix(c(-0.06650502, -0.08137967, -0.0049786140, -0.08479970, -0.09254074,
+                      0.09815685, 0.17619134, 0.0399463638, 0.34963642, -0.12153640,
+                      2.02916826, 1.01788045, -0.0078600759, 2.51905798, -0.32381009,
+                      -0.02031526, -0.00985028, -0.0008596306, -0.02967578, -0.03088393,
+                      0.30026642, -0.02446937, 0.0269447840, 0.50248297, 0.13961204
+            ),byrow=T,nrow=5))
+
+rownames(table1[[1]])= c("(Intercept)",
+                         "S&P 500", "USDX","WTI Crude Oil","Gold")
+
+rownames(table1[[2]])= c("(Intercept)",
+                         "S&P 500", "USDX","WTI Crude Oil","Gold")
+
+colnames(table1[[1]])= c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(table1[[2]])= c("BTC","ETH", "USDT", "BNB", "XRP")
+
+sigma1 = list(matrix(c(0.09649652,0.14936780,0.03670042,0.19396565,0.33483411),ncol = 5),
+              matrix(c(0.072706686,0.089604657,0.005490682,0.098948707,0.101258508),ncol = 5))
+
+colnames(sigma1[[1]]) = c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(sigma1[[2]]) = c("BTC","ETH", "USDT", "BNB", "XRP")
+rownames(sigma1[[1]]) = c("sigma1")
+rownames(sigma1[[2]]) = c("sigma2")
+
+knitr::kable(table1[[1]],format = "latex")
+knitr::kable(sigma1[[1]],format = "latex")
+```
+
+
+### State-2
+
+```{r,echo=FALSE,warning=FALSE,fig.width=13,fig.height = 6,fig.align='center'}
+knitr::kable(table1[[2]],format = "latex")
+knitr::kable(sigma1[[2]],format = "latex")
+
+```
+
+
+### $\tau_i = 0.50$, $\nu_k = 5$ and $K = 2$ 
+
+### State-1
+```{r,echo=FALSE,warning=FALSE,fig.width=13,fig.height = 6,fig.align='center'}
+
+table1= list(matrix(c(-0.008668331, 0.1585371, 0.004271584, 0.03897909, 0.5300873,
+                       -1.955485076, -0.7244973, -0.042436390, -2.56839127, -12.2038059,
+                       -10.014548467, 4.1004348, -6.910447833, -3.89057280, -15.4559146,
+                       2.978264537, 8.8920892, 4.062580117, -2.81258779, 3.2437870,
+                      -5.802491202, -9.9691329, -6.036969631, 7.63545592, 39.3907995),byrow=T,nrow=5),
+              matrix(c( 0.000920052, 0.0002954751, -1.856993e-05, 0.0021079528, -0.0009832140,
+                       -0.187528185, -0.1912720175, -9.104517e-04, -0.2027944061, -0.2121419243,
+                       0.055165674, -0.0494953581, 1.574601e-03, -0.0581235193, 0.0576135715,
+                      0.001435184, 0.0003007893, -5.324023e-04, -0.0006772317, -0.0005905928,
+                      -0.029861241, -0.0203165461, 1.990713e-03, 0.0378423645, -0.0209166477),byrow=T,nrow=5))
+
+rownames(table1[[1]])= c("(Intercept)",
+                         "S&P 500", "USDX","WTI Crude Oil","Gold")
+
+rownames(table1[[2]])= c("(Intercept)",
+                         "S&P 500", "USDX","WTI Crude Oil","Gold")
+
+colnames(table1[[1]])= c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(table1[[2]])= c("BTC","ETH", "USDT", "BNB", "XRP")
+
+sigma1 = list(matrix(c(0.08536249,0.26408310,0.09702546,0.11194696,0.59357212),ncol = 5),
+              matrix(c(0.030621665,0.039212494,0.002024219,0.046673481,0.043961019),ncol = 5))
+
+colnames(sigma1[[1]]) = c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(sigma1[[2]]) = c("BTC","ETH", "USDT", "BNB", "XRP")
+rownames(sigma1[[1]]) = c("sigma1")
+rownames(sigma1[[2]]) = c("sigma2")
+knitr::kable(table1[[1]],format = "latex")
+knitr::kable(sigma1[[1]],format = "latex")
+```
+
+
+### State-2
+
+```{r,echo=FALSE,warning=FALSE,fig.width=13,fig.height = 6,fig.align='center'}
+knitr::kable(table1[[2]],format = "latex")
+knitr::kable(sigma1[[2]],format = "latex")
+
+```
+
+
+### $\tau_i = 0.95$, $\nu_k = 5$ and $K = 2$ 
+
+### State-1
+```{r,echo=FALSE,warning=FALSE,fig.width=13,fig.height = 6,fig.align='center'}
+
+table1= list(matrix(c(0.1725874,0.1860709, 0.03273445, 1.707701, 0.5530456,
+                       12.6249052, 8.8454218, -0.25050773, 60.743735, 6.4149188,
+                       -1.2169006, 19.7350534, -5.54139714, -215.742978, 8.3046943,
+                       -1.9108639, 5.0792367, 1.46750611, -9.141110, -1.3943211,
+                       0.2631298, -0.5855383, -6.98834773, -65.459024, 59.3489333
+                       ),nrow=5,byrow=T),matrix(c(0.08052776, 0.09626744, 0.005392136, 0.11224347, 0.10333093,
+                                                  -0.71768456, -0.94017722, -0.011991524, -0.72701752, -0.49499787,
+                                                  -1.35910501, 0.95435054, -0.059274523, -1.55890056, -0.08322965,
+                                                  0.02863279, 0.03728082, 0.001160609, 0.03488114, 0.02876891,
+                                                  -0.48222667, 0.24835459, -0.041470246, -1.05268072, 0.12498665
+),nrow=5,byrow=T))
+
+rownames(table1[[1]])= c("(Intercept)",
+                         "S&P 500", "USDX","WTI Crude Oil","Gold")
+
+rownames(table1[[2]])= c("(Intercept)",
+                         "S&P 500", "USDX","WTI Crude Oil","Gold")
+
+colnames(table1[[1]])= c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(table1[[2]])= c("BTC","ETH", "USDT", "BNB", "XRP")
+
+sigma1 = list(matrix(c(0.20427939,0.24875286,0.06049275,1.81710315,0.66459345),ncol = 5),
+              matrix(c(0.080648225,0.097752625,0.005930978,0.116132562,0.110670693),ncol = 5))
+colnames(sigma1[[1]]) = c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(sigma1[[2]]) = c("BTC","ETH", "USDT", "BNB", "XRP")
+rownames(sigma1[[1]]) = c("sigma1")
+rownames(sigma1[[2]]) = c("sigma2")
+knitr::kable(table1[[1]],format = "latex")
+knitr::kable(sigma1[[1]],format = "latex")
+```
+
+
+### State-2
+
+```{r,echo=FALSE,warning=FALSE,fig.width=13,fig.height = 6,fig.align='center'}
+knitr::kable(table1[[2]],format = "latex")
+knitr::kable(sigma1[[2]],format = "latex")
+
+```
+
+
+The estimates of the state-specific parameters are gathered in the attached tables for the CQHMM, As regards the estimated scale parameters, $\sigma_2$ reflects stable periods, representing the so-called low-volatility state, meanwhile $\sigma_1$ contemplates rapid (positive and negative) peak and burst returns, which defines the second state as the high-volatility state. These results confirm the graphical analysis. 
+
+```{r,warning=FALSE,echo=FALSE,out.width='75%',fig.align='center',echo=FALSE,fig.cap="Scatterplot of State-Specific Crypto Returns for K = 2 and tau = 0.5"}
+
+knitr::include_graphics("C:/Users/User/OneDrive/Pictures/Screenshots/k_2_0.5.png")
+
+```
+
+```{r,warning=FALSE,echo=FALSE,out.width='75%',fig.align='center',echo=FALSE,fig.cap="Scatterplot of State-Specific Crypto Returns for K = 3 and tau = 0.5"}
+
+knitr::include_graphics("C:/Users/User/OneDrive/Pictures/Screenshots/tau_0.5.png")
+
+```
+
+Taking the impact of covariates into account, we comment on the parameter estimates of the CQHMM. As could be expected, the state-specific intercepts are increasing somewhat with $\tau$ , with State 2 having lower absolute values than State 1 for all $\tau$’s. For $\tau = 0.50$ we observe that at low volatility periods S&P 500 is the only statistically significant asset, negatively influencing almost all the cryptocurrencies for both quantile and expectile models, which implies that during tranquil periods crypto assets can be considered as weak hedges, During high volatility periods we observe that S&P500,
+Gold and Crude Oil influence some cryptos, especially Bitcoin. In particular, for the CQHMM at $\tau = 0.05$, we observe that at high volatility periods Gold influences all the cryptos considered. Finally, at $\tau = 0.95$ for the CQHMM for both states considered we note strong influences of US dollar index and Gold. The results for $K = 3$ are shown below. But they are not that interesting as $K=2$ case and also from model selection criterion (like - AIC,BIC) point of view also $K = 2$ is more interesting.
+
+## $\tau_i = 0.05$, $\nu_k = 5$ and $K = 3$
+
+### State-1
+
+```{r,echo=FALSE,warning=FALSE,fig.width=13,fig.height = 6,fig.align='center'}
+
+table1= list(matrix(c(-0.06650502,-0.08137967,-0.0049116703,-0.08484517,-0.09316020,
+                       0.09815685,0.17619134,0.0358049633,0.35525579,-0.08251236,
+                       2.02916826,1.01788045,0.0086492293,2.52751543,-0.23079036,
+                       -0.02031526,-0.00985028,-0.0006439814,-0.02971128,-0.03104071,
+                       0.30026642,-0.02446937,0.0248006407,0.50549065,0.23084905),byrow = T, nrow =5),
+              matrix(c(-0.08593051,-0.01370108,-0.03608981,-0.09478088,-0.0621145,
+                       -0.25212594,2.42344520,-0.38993363,4.09014286,12.5756489,
+                       5.23174495,9.16706915,-1.28053995,20.78946837,30.8726725,
+                       0.15419874,-2.47921757,0.23148613,-2.15785521,-9.6246805,
+                       -4.28810944,-7.16375177,0.91626716,-9.72232889,-20.8062004),byrow = T, nrow =5),
+              matrix(c(-0.06611959,-0.05681322,-0.03608981,-0.03846701,-0.05020383,
+                       -1.20022234,-0.92084797,-0.38993363,-0.76527940,-0.75359894,
+                       3.95161715,9.08502491,-1.28053995,4.41733526,7.08109758,
+                       0.42806726,0.03834035,0.23148613,-0.27830847,-0.01802507,
+                       -1.61135791,-2.08582655,0.91626716,-1.18691294,-1.5275868),byrow = T, nrow =5))
+
+
+rownames(table1[[3]])= c("(Intercept)",
+                         "S&P 500", "USDX","WTI Crude Oil","Gold")
+colnames(table1[[1]])= c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(table1[[2]])= c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(table1[[3]])= c("BTC","ETH", "USDT", "BNB", "XRP")
+
+sigma1 = list(matrix(c(0.072706686,0.089604657,0.005432444,0.098986004,0.101766951),ncol = 5),
+              matrix(c(0.09668455,0.10469337,0.03673303,0.16679328,0.32814998),ncol = 5),
+              matrix(c(0.07573159,0.07731462,0.03673303,0.06710115,0.0720178),ncol = 5))
+
+colnames(sigma1[[1]]) = c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(sigma1[[2]]) = c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(sigma1[[3]]) = c("BTC","ETH", "USDT", "BNB", "XRP")
+rownames(sigma1[[1]]) = c("sigma1")
+rownames(sigma1[[2]]) = c("sigma2")
+rownames(sigma1[[3]]) = c("sigma3")
+knitr::kable(table1[[1]],format = "latex")
+knitr::kable(sigma1[[1]],format = "latex")
+```
+
+### State-2
+
+```{r,echo=FALSE,warning=FALSE,fig.width=13,fig.height = 6,fig.align='center'}
+knitr::kable(table1[[2]],format = "latex")
+knitr::kable(sigma1[[2]],format = "latex")
+
+```
+
+### State-3
+
+```{r,echo=FALSE,warning=FALSE,fig.width=13,fig.height = 6,fig.align='center'}
+knitr::kable(table1[[3]],format = "latex")
+knitr::kable(sigma1[[3]],format = "latex")
+
+```
+
+## $\tau_i = 0.50$, $\nu_k = 5$ and $K = 3$ 
+
+### State-1
+```{r,echo=FALSE,warning=FALSE,fig.width=13,fig.height = 6,fig.align='center'}
+
+table1= list(matrix(c(0.06356095,0.07797249,0.001588634,0.2816032,0.04023733,
+                       7.29788587,6.51432705,1.544191631,-23.6432966,6.33413258,
+                       -19.39851858,42.62764835,-3.156188233,-439.0459182,29.71196578,
+                       -3.75443019,4.35136556,-3.017929516,-12.6364850,3.10515968,
+                       19.61761638,4.92576028,-1.010640320,178.8638577,-3.20671576),byrow=T,nrow=5),
+              matrix(c(-0.008668537,0.1585371,0.004271584,0.03897909,0.5300873,
+                       -1.955485976,0.7244973,-0.042436390,-2.56839127,-12.2038059,
+                       -10.914548467,4.1004348,-6.919447833,-3.89057280,-15.4559146,
+                       2.978264537,8.8920892,4.062580117,-2.81258779,3.2437870,
+                       -5.802491202,-9.9691329,-6.03696931,7.63545592,39.3907995),byrow=T,nrow=5),
+              matrix(c(0.0009173887,0.0002576529,-1.856993e-05,0.0020982427,-0.0009832140,
+                       -0.1876268684,-0.2352813119,-9.104517e-04,-0.2028221438,-0.2121419243,
+                       0.0568083879,-0.1602185616,1.574601e-03,-0.0589007527,0.0576135715,
+                       0.0014365752,0.0004490325,-5.324023e-04,-0.0006832943,-0.0005905928,
+                       -0.0295624876,-0.033662233,1.990713e-03,0.367616444,-0.0209166477),byrow=T,nrow=5))
+
+
+rownames(table1[[3]])= c("(Intercept)",
+                         "S&P 500", "USDX","WTI Crude Oil","Gold")
+colnames(table1[[1]])= c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(table1[[2]])= c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(table1[[3]])= c("BTC","ETH", "USDT", "BNB", "XRP")
+
+sigma1 = list(matrix(c(0.072706686,0.089604657,0.005432444,0.098986004,0.101766951),ncol = 5),
+              matrix(c(0.09668455,0.10469337,0.03673303,0.16679328,0.32814998),ncol = 5),
+              matrix(c(0.07573159,0.07731462,0.03673303,0.06710115,0.07201728),ncol = 5))
+
+colnames(sigma1[[1]]) = c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(sigma1[[2]]) = c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(sigma1[[3]]) = c("BTC","ETH", "USDT", "BNB", "XRP")
+rownames(sigma1[[1]]) = c("sigma1")
+rownames(sigma1[[2]]) = c("sigma2")
+rownames(sigma1[[3]]) = c("sigma3")
+
+knitr::kable(table1[[1]],format = "latex")
+knitr::kable(sigma1[[1]],format = "latex")
+```
+
+
+### State-2
+
+```{r,echo=FALSE,warning=FALSE,fig.width=13,fig.height = 6,fig.align='center'}
+knitr::kable(table1[[2]],format = "latex")
+knitr::kable(sigma1[[2]],format = "latex")
+
+```
+
+### State-3
+
+```{r,echo=FALSE,warning=FALSE,fig.width=13,fig.height = 6,fig.align='center'}
+knitr::kable(table1[[3]],format = "latex")
+knitr::kable(sigma1[[3]],format = "latex")
+
+```
+
+## $\tau_i = 0.95$, $\nu_k = 5$ and $K = 3$ 
+
+### State-1
+```{r,echo=FALSE,warning=FALSE,fig.width=13,fig.height = 6,fig.align='center'}
+
+table1= list(matrix(c(0.1817063,0.1860709,0.04140168,1.750372,0.5738683,
+                       13.6480949,8.8454218,0.55528039,64.123778,8.5040808,
+                       -0.2663764,19.7350534,-4.12536729,-209.905450,14.9392246,
+                       -2.5664559,5.0792367,0.55910928,-10.235225,-3.5718990,
+                       -1.0085077,-0.5855383,-6.30949188,-72.255621,60.5738749),byrow=T,nrow=5),
+              matrix(c(0.08034186,0.09626744,0.005391013,0.11224347,0.10333093,
+                       -0.76200623,-0.94017722,-0.011975170,-0.72701752,-0.49499787,
+                       -1.23003508,0.95435054,0.059174695,-1.55890056,-0.08322965,
+                       0.02898982,0.03728082,0.001159941,0.03488114,0.02876891,
+                       -0.44776986,0.24835459,-0.041580441,-1.05268072,0.12498665),byrow=T,nrow=5),
+              matrix(c(0.1842176,0.1860709,0.04192486,1.762073,0.5749594,
+                       13.7218200,8.84545218,0.60391978,64.474049,8.6135497,
+                       0.2007593,19.7350534,-4.03989216,-207.735485,15.2868639,
+                       -2.4553320,5.0792367,0.50427616,-9.726902,-3.6860008,
+                       -1.4837502,-0.5855383,-6.26851444,-74.465965,60.6380600),byrow=T,nrow=5))
+
+rownames(table1[[3]])= c("(Intercept)",
+                         "S&P 500", "USDX","WTI Crude Oil","Gold")
+colnames(table1[[1]])= c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(table1[[2]])= c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(table1[[3]])= c("BTC","ETH", "USDT", "BNB", "XRP")
+
+sigma1 = list(matrix(c(0.21827924,0.24875286,0.05431204,1.8644982,0.68707955),ncol = 5),
+              matrix(c(0.08048521,0.09775262,0.00592995,0.11613256,0.11067069),ncol = 5),
+              matrix(c(0.2202129,0.2487529,0.0541788,1.8734121,0.6883370),ncol = 5))
+
+colnames(sigma1[[1]]) = c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(sigma1[[2]]) = c("BTC","ETH", "USDT", "BNB", "XRP")
+colnames(sigma1[[3]]) = c("BTC","ETH", "USDT", "BNB", "XRP")
+rownames(sigma1[[1]]) = c("sigma1")
+rownames(sigma1[[2]]) = c("sigma2")
+rownames(sigma1[[3]]) = c("sigma3")
+
+knitr::kable(table1[[1]],format = "latex")
+knitr::kable(sigma1[[1]],format = "latex")
+```
+
+
+### State-2
+
+```{r,echo=FALSE,warning=FALSE,fig.width=13,fig.height = 6,fig.align='center'}
+knitr::kable(table1[[2]],format = "latex")
+knitr::kable(sigma1[[2]],format = "latex")
+
+```
+
+### State-3
+
+```{r,echo=FALSE,warning=FALSE,fig.width=13,fig.height = 6,fig.align='center'}
+knitr::kable(table1[[3]],format = "latex")
+knitr::kable(sigma1[[3]],format = "latex")
+
+```
+
+## Observations
+
+1. The relationship among these two different markets is rather complex, and it is more pronounced in the tails of the returns distributions.
+
+2. The dependence within the crypto market varies over time according to the market conditions.
+
+The considered timespan extends from July, 25 2017 to October, 31 2023, including numerous crises that have impacted cross-market integration patterns, such as the crypto price bubbles of early 2018, the COVID-19 pandemic, Biden’s election at the USA presidency in November 2020 and the Russian invasion of Ukraine at the beginning of 2022, which have caused unprecedented levels of uncertainty and risk.
+
+\newpage
+
+\begin{center}
+\textbf{\Large{Theory Extension}}
+\end{center}
+
+# Quantile and Expectile Copula Based Hidden Semi-Markov Model
+
+This novel approach introduces the Copula Quantile Hidden Semi Markov Model (CQHSMM) and the Copula Expectile Hidden Semi Markov Model (CEHSMM) to capture state-dependent multivariate distributions. Emphasizing flexibility, the models incorporate copulas with dynamic parameters, allowing for accurate representation of complex dependence structures. The models employ Gaussian and t copulas, with sojourn durations modeled through a semi-Markovian framework.
+
+Let $\{S_t\}_{t=1}^T$ represent a finite-state hidden semi-Markov chain over a discrete state space $S = \{1, ..., K\}$. The latent process $\{S_t\}_{t=1}^T$ is constructed as follows. A homogeneous hidden Markov chain with K states models transitions between different states with initial probabilities, $\pi_k = Pr(S_1 = k)$, and transition probabilities $\pi_{jk} = Pr(S_{t+1} = k | S_t = j, S_{t+1} \neq j)$, with $\sum_{k=1}^K \pi_{jk} = 1$, $\pi_{jk} \geq 0$, for every $k = 1, ..., K$ and $\pi_{jj} = 0$. In short, we collect initial and transition probabilities in the K-dimensional vector $\pi$ and in the $K \times K$ matrix $Q$, respectively. Because the unobserved process is semi-Markovian, only transitions between states are governed by the transition probabilities. Still, the duration of a stay in a state is modeled by a separate sojourn duration (SD). Let $d_k(u)$ be the SD, i.e., the probability that $\{S_t\}_{t=1}^T$ spends u consecutive time steps in the k-th state. $U_k$ corresponds to the maximum sojourn time in the k-th state. Let $U = (U_1, ..., U_K)$ be the K-dimensional vector collecting all state-specific maximum sojourn times.
+
+HSMMs offer flexibility as the SD is directly specified by the researcher and can be estimated from the observed data. The SD can be chosen from various parametric distributions, such as shifted-Poisson or shifted-negative binomial. Parametric distributions might lack flexibility, so semi- and nonparametric data-driven approaches can be adopted for more flexibility and better accommodation of complex distributional shapes.
+
+To build the proposed model, let $\boldsymbol{Y_t} = (Y_{t,1}, ..., Y_{t,d})$ be a continuous observable d-variate response variable, and $\boldsymbol{x_t} = (1, x_{t,2}, ..., x_{t,p})$ be a p-dimensional vector of covariates. The process $\{Y_t\}_{t=1}^T$ represents the state-dependent process of the HSMM and, conditional on hidden states, fulfills the independence property.
+
+$$f_Y(y_t | x_t, y_1, ..., y_{t-1}, S_1 = s_1, ..., S_t = s_t) = f_Y(y_t | x_t, S_t = s_t)$$
+
+Let $F_{Y_{t,j}}(y_{t,j}|x_t,S_t=k)$, $j=1, ..., d$, be the distribution functions of the marginals, the state-dependent multivariate distribution of $Y_t$ given covariates and $S_t=k$.
+
+$$F_{Y_t}(y_t|x_t,S_t=k) = C(F_{Y_{t,1}}(y_{t,1}|x_t,S_t=k), ..., F_{Y_{t,d}}(y_{t,d}|x_t,S_t=k);\eta_k)$$
+
+By Sklar's Theorem, the joint density can be expressed as:
+
+$$f_{Y_t}(y_t|x_t,S_t=k) = \Pi_{j=1}^d \ f_{Y_{t,j}}(y_{t,j}|x_t,S_t=k)c(u_1, ..., u_d;\eta_k) \ \ \ \ \ \ \ ...(1)$$
+
+Here, $u_j = F_{Y_{t,j}}(y_{t,j}|x_t,S_t=k)$ and $c(.;\eta_k) = \displaystyle \frac{\partial^d C(.;\eta_k)}{\partial F_1...\partial F_d} \ \ \ \ .... (2)$
+
+If a particular form of the density function is used, then
+
+$$f_{Y_{t,j}}(y_{t,j}|x_t,S_t=k) = B_{l,\tau_j}(\sigma_{j,k})exp[-\omega_{l,\tau_j}(\frac{y_{t,j}-\mu_{t,j,k}}{\sigma_{j,k}})]$$
+
+where $\mu_{t,j,k}$ is the Location Parameter, $\sigma_{j,k} > 0$ is the Scale Parameter, $\omega_{l,\tau_j}(.)$ is the Kernel function related to the quantile/expectile loss function, and $B_{l,\tau_j}(\sigma_{j,k})$ is the Normalizing constant.
+
+Now, $\mu_{t,j,k}(\tau_j) = x_{t}B_{j,k}(\tau_j)$; $j=1,...,d$. The above equations define the newly proposed Copula Quantile Hidden SeminMarkov Model when $l=1$ and Copula Expectile Hidden Semi Markov Model when $l=2$. The distribution functions of Gaussian and t copulas are written as - 
+
+$$C^G(\boldsymbol{u},\Omega^\Phi) = \Phi_d(\Phi^{-1}(u_1), ..., \Phi^{-1}(u_d);\Omega^\Phi)$$
+
+$$C^t(\boldsymbol{u},\Omega^\Psi,\nu) = \Psi_d(\Psi^{-1}(u_1;\nu), ..., \Psi^{-1}(u_d;\nu);\Omega^\Psi,\nu)$$
+
+where $\Phi_d$ and $\Psi_d$ denote the joint distribution functions of d-variate normal and t distribution with correlation matrices $\Omega^\Phi$ and $\Omega^\Psi$ respectively. $\Phi^{-1}$ and $\Psi^{-1}$ are the inverse distribution functions of univariate standard distributions. We impose $\nu > 2$ on the degrees of freedom of t copula.
+
+\newpage
+
+# Appendix - Codes
+
+The code provided below offers a step-by-step guide to model estimation and analysis. This implementation bridges the theoretical concepts outlined in the paper with tangible application, demonstrating how these advanced models can be utilized to unravel the complex dynamics of cryptocurrency markets in real-world scenarios.
+
+## CQHMM Model
+
+### Paremeter Initialization:
+```{r,eval=FALSE}
+y_dummy <- our_data[-1,2:6]
+x_dummy <- our_data[-nrow(our_data),7:10]
+our_data <- data.frame(t = 1:nrow(y_dummy),y_dummy,x_dummy)
+tau_fixed <- 0.95
+  
+T <- nrow(our_data); K <- 2
+hidden_chain <- sample(1:K,size = T,replace = T)
+transition_prob <- as.matrix(markovchainFit(hidden_chain)$estimate[1:K,])
+
+beta0_1 <- vector(mode = 'list',length = K)
+sigma0_1 <- vector(mode = "list",length = K)
+
+#CQHMM
+for(i in 1:K){
+  m1 = lm(BTC ~ X.GSPC + DX.Y.NYB + CL.F + GC.F,
+          data = our_data[hidden_chain == i,])
+  m2 = lm(ETH ~ X.GSPC + DX.Y.NYB + CL.F + GC.F,
+          data = our_data[hidden_chain == i,])
+  m3 = lm(USDT ~ X.GSPC + DX.Y.NYB + CL.F + GC.F,
+          data = our_data[hidden_chain == i,])
+  m4 = lm(BNB ~ X.GSPC + DX.Y.NYB + CL.F + GC.F,
+          data = our_data[hidden_chain == i,])
+  m5 = lm(XRP ~ X.GSPC + DX.Y.NYB + CL.F + GC.F,
+          data = our_data[hidden_chain == i,])
+  beta0_1[[i]] <- cbind(m1$coefficients,m2$coefficients,
+                        m3$coefficients,m4$coefficients,
+                        m5$coefficients)
+  sigma0_1[[i]] <- c(sum(m1$residuals^2)/m1$df.residual,
+                     sum(m2$residuals^2)/m2$df.residual,
+                     sum(m3$residuals^2)/m3$df.residual,
+                     sum(m4$residuals^2)/m4$df.residual,
+                     sum(m5$residuals^2)/m5$df.residual)
+  
+}
+
+#Initial Correlation Matrix
+cormat0 <- vector(mode = 'list',length = K)
+for(i in 1:K){
+  cormat0[[i]] <- cor(our_data[hidden_chain == i,2:6])
+}
+
+```
+
+### Emission Distribution Using t-Copula:
+
+```{r,eval=FALSE}
+G <- function(y,x,betas,sigmas){
+  dens_val <- NULL;k <- length(sigmas)
+  for(i in 1:k){
+   #myCop <- tCopula(param = 5,dim = 5,dispstr = "un", correlation = cormat0[[i]])
+   myCop <- tCopula(df = 5,dim = 5,param = cormat0[[i]][lower.tri(cormat0[[i]])],
+                    dispstr = "un")
+   myMvd <- mvdc(copula=myCop, margins=c("ALD","ALD","ALD","ALD","ALD"),
+                 paramMargins=list(list(mu = sum(c(1,x)*betas[[i]][,1]), 
+                                        sigma = sigmas[[i]][1],p = tau_fixed),
+                                   list(mu = sum(c(1,x)*betas[[i]][,2]), 
+                                        sigma = sigmas[[i]][2],p = tau_fixed), 
+                                   list(mu = sum(c(1,x)*betas[[i]][,3]),
+                                        sigma = sigmas[[i]][3],p = tau_fixed),
+                                   list(mu = sum(c(1,x)*betas[[i]][,4]), 
+                                        sigma = sigmas[[i]][4],p = tau_fixed),
+                                   list(mu = sum(c(1,x)*betas[[i]][,5]), 
+                                        sigma = sigmas[[i]][5],p = tau_fixed)))
+    dens_val <- c(dens_val,dMvdc(y,myMvd))
+  }
+  return(dens_val)
+}
+
+```
+
+### Baum-Welch Algorithm:
+
+```{r,eval=FALSE}
+# forward-backward algorithm with parameter estimation
+forward_backward_em_algorithm <- function(y,x,Q,G,m,betas,sigmas){
+  
+  T <- nrow(y)  # Number of time points
+  K <- nrow(Q)    # Number of states
+  prox <- rep(0.0001,K)
+  
+  # Initialization
+  alpha <- matrix(0,nrow = T, ncol = K)
+  beta <- matrix(0,nrow = T, ncol = K)
+  
+  # E-step (Forward-Backward)
+  alpha[1, ] <- m * G(as.vector(as.matrix(y[1,])),
+                      as.vector(as.matrix(x[1,])),betas,sigmas) + 0.0001
+  for (t in 2:T) {
+    g <- G(as.vector(as.matrix(y[t,])),as.vector(as.matrix(x[t,])),betas,sigmas)
+    alpha[t, ] <- apply(Q * crossprod(t(alpha[t - 1, ]),g + prox), 2, sum) + 0.0001
+    alpha[t, ] <- alpha[t, ] / sum(alpha[t, ])
+  }
+  
+  beta[T, ] <- rep(1, K)
+  for (t in (T - 1):1) {
+    g <- G(as.vector(as.matrix(y[t+1,])),as.vector(as.matrix(x[t+1,])),betas,sigmas)
+    beta[t, ] <- apply(Q * crossprod(t(beta[t + 1, ]), (g + prox)), 1, sum) + 0.0001
+    beta[t, ] <- beta[t, ] / sum(beta[t, ])
+  }
+  
+  # Combine forward and backward probabilities to get smoothed probabilities
+  gamma_h <- alpha * beta
+  gamma_h <- gamma_h / rowSums(gamma_h)
+  
+  epsilon <- vector(mode='list', length = length(y))
+  epsilon[[1]] = t(replicate(K,gamma_h[1,]))
+  for(t in 2:T){
+    g <- G(as.vector(as.matrix(y[t,])),as.vector(as.matrix(x[t,])),betas,sigmas)
+    epsilon[[t]] = t(t(Q)*alpha[t-1,]*(g + prox)*beta[t,]) + 0.0001
+  }
+  
+  epsilon <- lapply(epsilon,FUN = function(mat){mat/sum(mat)})
+  hidden_var <- apply(gamma_h,1,FUN = function(arr){which.max(arr)})
+  
+  return(list(alpha = alpha, beta = beta, gamma = gamma_h,
+              epsilon = epsilon,state = hidden_var))
+}
+
+y = our_data[,2:6]
+x = our_data[,7:10]
+Q = transition_prob
+m = rep(1,K)/K
+results = forward_backward_em_algorithm(y,x,Q,G,m,beta0_1,sigma0_1) 
+```
+
+### Iterations to estimate parameters:
+
+```{r,eval=FALSE}
+for(epoch in 1:20){
+  
+  new_gamma_h <- results$gamma
+  new_m <- results$gamma[1,]
+  new_hidden_var <- results$state
+  new_Q <- Reduce(`+`,results$epsilon)
+  new_Q <- new_Q/rowSums(new_Q)
+  K <- nrow(new_Q)
+  
+  new_betas <- vector(mode = 'list',length = K)
+  new_sigmas <- vector(mode = "list",length = K)
+  
+  for(i in 1:K){
+    m1 = rq(BTC ~ X.GSPC + DX.Y.NYB + CL.F + GC.F ,data = our_data,
+            tau = tau_fixed,weights = new_gamma_h[,i])
+    m2 = rq(ETH ~ X.GSPC + DX.Y.NYB + CL.F + GC.F ,data = our_data,
+            tau = tau_fixed,weights = new_gamma_h[,i])
+    m3 = rq(USDT ~ X.GSPC + DX.Y.NYB + CL.F + GC.F ,data = our_data,
+            tau = tau_fixed,weights = new_gamma_h[,i])
+    m4 = rq(BNB ~ X.GSPC + DX.Y.NYB + CL.F + GC.F ,data = our_data,
+            tau = tau_fixed,weights = new_gamma_h[,i])
+    m5 = rq(XRP ~ X.GSPC + DX.Y.NYB + CL.F + GC.F ,data = our_data,
+            tau = tau_fixed,weights = new_gamma_h[,i])
+    new_betas[[i]] <- cbind(m1$coefficients,m2$coefficients,
+                            m3$coefficients,
+                            m4$coefficients,
+                            m5$coefficients)
+    new_sigmas[[i]] <- c(mean(abs(m1$residuals)),mean(abs(m2$residuals)),
+                         mean(abs(m3$residuals)),
+                         mean(abs(m4$residuals)),mean(abs(m5$residuals)))
+  }
+  
+  
+  #Initial Correlation Matrix
+  new_cormat <- vector(mode = 'list',length = K)
+  for(i in 1:K){
+    new_cormat[[i]] <- cor(our_data[new_hidden_var == i,2:6])
+  }
+  
+  new_G <- function(y,x,betas,sigmas){
+    dens_val <- NULL;k <- length(sigmas)
+    for(i in 1:k){
+      #myCop <- tCopula(param = 5,dim = 5,dispstr = "un", correlation = cormat0[[i]])
+      myCop <- tCopula(df = 5,dim = 5,param = cormat0[[i]][lower.tri(new_cormat[[i]])],
+                       dispstr = "un")
+      myMvd <- mvdc(copula=myCop, margins=c("ALD","ALD","ALD","ALD","ALD"),
+                    paramMargins=list(list(mu = sum(c(1,x)*betas[[i]][,1]), 
+                                           sigma = sigmas[[i]][1],p = tau_fixed),
+                                      list(mu = sum(c(1,x)*betas[[i]][,2]), 
+                                           sigma = sigmas[[i]][2],p = tau_fixed), 
+                                      list(mu = sum(c(1,x)*betas[[i]][,3]), 
+                                           sigma = sigmas[[i]][3],p = tau_fixed),
+                                      list(mu = sum(c(1,x)*betas[[i]][,4]), 
+                                           sigma = sigmas[[i]][4],p = tau_fixed),
+                                      list(mu = sum(c(1,x)*betas[[i]][,5]), 
+                                           sigma = sigmas[[i]][5],p = tau_fixed)))
+      dens_val <- c(dens_val,dMvdc(y,myMvd))
+    }
+    return(dens_val)
+  }
+  
+  results = forward_backward_em_algorithm(y,x,new_Q,new_G,new_m,
+                                          new_betas,new_sigmas) 
+}
+
+```
+
+### Bootstrap to estimate std error:
+
+```{r,eval=FALSE}
+G_sample <- function(y,x,betas,sigmas){
+  
+  myCop <- tCopula(df = 5,dim = 5,param = cormat0[[i]][lower.tri(cormat0[[i]])],
+                     dispstr = "un")
+  myMvd <- mvdc(copula=myCop, margins=c("ALD","ALD","ALD","ALD","ALD"),
+                  paramMargins=list(list(mu = sum(c(1,x)*betas[,1]), 
+                                         sigma = sigmas[1],p = tau_fixed),
+                                    list(mu = sum(c(1,x)*betas[,2]), 
+                                         sigma = sigmas[2],p = tau_fixed), 
+                                    list(mu = sum(c(1,x)*betas[,3]), 
+                                         sigma = sigmas[3],p = tau_fixed),
+                                    list(mu = sum(c(1,x)*betas[,4]), 
+                                         sigma = sigmas[4],p = tau_fixed),
+                                    list(mu = sum(c(1,x)*betas[,5]), 
+                                         sigma = sigmas[5],p = tau_fixed)))
+  return(rMvdc(y,myMvd))
+}
+```
+
+Using the above function, we have drawn sample from the estimation distribution repeatedly. For each such sample we have estimated model parameters and then have calculated the standard error of the model.
+
+## CEHMM Model
+
+### Paremeter Initialization:
+```{r,eval=FALSE}
+y_dummy <- our_data[-1,2:6]
+x_dummy <- our_data[-nrow(our_data),7:10]
+our_data <- data.frame(t = 1:nrow(y_dummy),y_dummy,x_dummy)
+tau_fixed <- 0.95
+  
+T <- nrow(our_data); K <- 2
+hidden_chain <- sample(1:K,size = T,replace = T)
+transition_prob <- as.matrix(markovchainFit(hidden_chain)$estimate[1:K,])
+
+#CEHMM
+beta0_2 <- vector(mode = 'list',length = K)
+sigma0_2 <- vector(mode = "list",length = K)
+for(i in 1:K){
+  m1 = rq(BTC ~ X.GSPC + DX.Y.NYB + CL.F + GC.F,
+          data = our_data[hidden_chain == i,],tau = 0.5)
+  m2 = rq(ETH ~ X.GSPC + DX.Y.NYB + CL.F + GC.F,
+          data = our_data[hidden_chain == i,],tau = 0.5)
+  m3 = rq(USDT ~ X.GSPC + DX.Y.NYB + CL.F + GC.F,
+          data = our_data[hidden_chain == i,],tau = 0.5)
+  m4 = rq(BNB ~ X.GSPC + DX.Y.NYB + CL.F + GC.F,
+          data = our_data[hidden_chain == i,],tau = 0.5)
+  m5 = rq(XRP ~ X.GSPC + DX.Y.NYB + CL.F + GC.F,
+          data = our_data[hidden_chain == i,],tau = 0.5)
+  beta0_2[[i]] <- cbind(m1$coefficients,m2$coefficients,
+                        m3$coefficients,m4$coefficients,
+                        m5$coefficients)
+  sigma0_2[[i]] <- c(mean(abs(m1$residuals)),
+                     mean(abs(m2$residuals)),mean(abs(m3$residuals)),
+                     mean(abs(m4$residuals)),mean(abs(m5$residuals)))
+}
+
+#Initial Correlation Matrix
+cormat0 <- vector(mode = 'list',length = K)
+for(i in 1:K){
+  cormat0[[i]] <- cor(our_data[hidden_chain == i,2:6])
+}
+
+```
+
+After initializing the parameters we will use t-Copula and Baum-Welch Algorithm to update the parameters. Then we iterate to get final estimates.
+
+### Iterations to estimate parameters:
+
+```{r,eval=FALSE}
+for(epoch in 1:20){
+  
+  new_gamma_h <- results$gamma
+  new_m <- results$gamma[1,]
+  new_hidden_var <- results$state
+  new_Q <- Reduce(`+`,results$epsilon)
+  new_Q <- new_Q/rowSums(new_Q)
+  K <- nrow(new_Q)
+  
+  new_betas <- vector(mode = 'list',length = K)
+  new_sigmas <- vector(mode = "list",length = K)
+  
+  for(i in 1:K){
+    m1 = rq(BTC ~ X.GSPC + DX.Y.NYB + CL.F + GC.F ,data = our_data,
+            tau = tau_fixed,weights = new_gamma_h[,i])
+    m2 = rq(ETH ~ X.GSPC + DX.Y.NYB + CL.F + GC.F ,data = our_data,
+            tau = tau_fixed,weights = new_gamma_h[,i])
+    m3 = rq(USDT ~ X.GSPC + DX.Y.NYB + CL.F + GC.F ,data = our_data,
+            tau = tau_fixed,weights = new_gamma_h[,i])
+    m4 = rq(BNB ~ X.GSPC + DX.Y.NYB + CL.F + GC.F ,data = our_data,
+            tau = tau_fixed,weights = new_gamma_h[,i])
+    m5 = rq(XRP ~ X.GSPC + DX.Y.NYB + CL.F + GC.F ,data = our_data,
+            tau = tau_fixed,weights = new_gamma_h[,i])
+    new_betas[[i]] <- cbind(m1$coefficients,m2$coefficients,
+                            m3$coefficients,m4$coefficients,
+                            m5$coefficients)
+    new_sigmas[[i]] <- c(mean(abs(m1$residuals)),mean(abs(m2$residuals)),
+                         mean(abs(m3$residuals)),
+                         mean(abs(m4$residuals)),mean(abs(m5$residuals)))
+  }
+  
+  
+  #Initial Correlation Matrix
+  new_cormat <- vector(mode = 'list',length = K)
+  for(i in 1:K){
+    new_cormat[[i]] <- cor(our_data[new_hidden_var == i,2:6])
+  }
+  
+  new_G <- function(y,x,betas,sigmas){
+    dens_val <- NULL;k <- length(sigmas)
+    for(i in 1:k){
+      #myCop <- tCopula(param = 5,dim = 5,dispstr = "un", correlation = cormat0[[i]])
+      myCop <- tCopula(df = 5,dim = 5,param = cormat0[[i]][lower.tri(new_cormat[[i]])],
+                       dispstr = "un")
+      myMvd <- mvdc(copula=myCop, margins=c("ALD","ALD","ALD","ALD","ALD"),
+                    paramMargins=list(list(mu = sum(c(1,x)*betas[[i]][,1]),
+                                           sigma = sigmas[[i]][1],p = tau_fixed),
+                                      list(mu = sum(c(1,x)*betas[[i]][,2]), 
+                                           sigma = sigmas[[i]][2],p = tau_fixed), 
+                                      list(mu = sum(c(1,x)*betas[[i]][,3]), 
+                                           sigma = sigmas[[i]][3],p = tau_fixed),
+                                      list(mu = sum(c(1,x)*betas[[i]][,4]), 
+                                           sigma = sigmas[[i]][4],p = tau_fixed),
+                                      list(mu = sum(c(1,x)*betas[[i]][,5]), 
+                                           sigma = sigmas[[i]][5],p = tau_fixed)))
+      dens_val <- c(dens_val,dMvdc(y,myMvd))
+    }
+    return(dens_val)
+  }
+  
+  results = forward_backward_em_algorithm(y,x,new_Q,new_G,new_m,
+                                          new_betas,new_sigmas) 
+}
+
+```
+
+
+# References
+
+1. [Quantile and expectile copula-based hidden Markov regression models for the analysis of the cryptocurrency market](https://arxiv.org/abs/2307.06400)
+
+2. [Hidden Markov Models](https://web.stanford.edu/~jurafsky/slp3/A.pdf)
+
+3. [crypto2 R package](https://rdrr.io/cran/crypto2/man/)
+
+4. [Quantile models for multivariate time series](https://scholar.google.com/citations?view_op=view_citation&hl=es&user=1IIzPGgAAAAJ&citation_for_view=1IIzPGgAAAAJ:IWHjjKOFINEC)
+
+
+
+
+
+
+
+
+
+
+

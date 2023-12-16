@@ -1,0 +1,136 @@
+---
+title: "**Research Reading: Quantile and expectile copula-based hidden Markov regression models for the analysis of the cryptocurrency market**"
+author: "Adrija Saha(MD2203) & Shrayan Roy(MD2220), M.Stat 2nd Year"
+mainfont: Roboto
+monofont: Consolas
+output: 
+  pdf_document:
+    toc: no
+    number_sections: true
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\begin{abstract}
+This is a extraction of the paper \textcolor{blue}{https://arxiv.org/abs/2307.06400} in our understanding. The paper introduces a novel theoretical framework, employing hidden Markov regression models and state-dependent elliptical copulas to address unobserved heterogeneity and evolving dependency structures in cryptocurrency returns. Furthermore, it conducts a practical analysis, exploring the dynamic relationships between global market indices and major cryptocurrencies. The paper's holistic approach provides distinctive insights into the cryptocurrency-market connection, especially under extreme market conditions, expanding the existing literature in a significant manner.
+\end{abstract}
+
+# Introduction:
+
+The advent of Bitcoin over a decade ago revolutionized the world of finance by enabling decentralized, rapid transactions. This innovation piqued the interest of policymakers, academics, and investors due to the unique characteristics of cryptocurrencies, which can serve both as efficient payment methods and investment assets. The proliferation of alternative **crypto assets**, emulating **Bitcoin's path**, has sparked speculative fervor, occasionally leading to market instability, notably after the **2017 boom and 2018 crash**. The COVID-19 pandemic in early 2020 further heightened the volatility of crypto assets, raising questions about their behavior during crises and their impact on global stock markets.
+
+Various aspects of cryptocurrencies have been examined in the financial literature, including their **long-memory, efficiency, hedging properties**, and relationships with traditional assets. **Quantile regression**, particularly in the form of **expectile regression**, has been used to address the *high kurtosis, skewness,* and *serial correlation* in cryptocurrency returns. However, these studies primarily focus on **univariate time series**.
+
+The paper introduces a novel approach to *jointly estimate conditional quantiles and expectiles of multiple cryptocurrency returns by developing hidden Markov regression models*. These models incorporate **state-dependent dependencies** among cryptocurrencies and time-varying copulas to analyze the evolving relationships between cryptocurrencies and traditional financial assets across different volatility states using a Maximum Likelihood framework.
+
+# Model Setup: 
+
+Let, ${\{S_t\}}_{t=1}^T$ be a latent, *homogeneous first order Markov chain* defined on the dicrete state space $\{1,...,K\}$ and $\pi_k$$=Pr(S_1=k)$ be the initial probability of state $k$, for $k=1,2,...,K$ and $\pi_{k|j}$$=Pr(S_{t+1}=k|S_t=j)$ with $\sum_{k=1}^K \pi_{k|j}=1$  and $\pi_{k|j}\ge 0$ denote the transition probability between states $j$ and $k$.
+
+Let, $\boldsymbol{\pi_k} = (\pi_1,\pi_2,...,\pi_k)$, $\Pi=((\pi_{k|j}))$
+$\boldsymbol{Y_t} = (Y_{t,1},...,Y_{t,d})$ be a continuous dependent variable and $\boldsymbol{x_t}=(1,x_{t,2},...,x_{t,p})$ be a $p$-dimensional vector of fixed covariates at time $t=1,...,T$ and $\boldsymbol{\tau}=(\tau_1,...,\tau_d)$, where $\tau_j \in (0,1)$,$j=1,...,d$ are fixed scalars.
+
+Let, $F_{Y_{t,j}}(y_{t,j}|x_t,S_t=k)$,$j=1,...,d$, be the distribution functions of the marginals, the *state dependent multivariate distribution* of $Y_t$ given covariates and $S_t=k$, then, $$F_{Y_t}(y_t|x_t,S_t=k)=C(F_{Y_{t,1}}(y_{t,1}|x_t,S_t=k),...,F_{Y_{t,d}}(y_{t,d}|x_t,S_t=k);\eta_k)$$
+where, $C(.:\eta_k)$ is a $d$-variate copula with time-varying parameter vector $\eta_k$ that evolves over time according to the hidden process $S_t$ and takes one of the values in the set $\{\eta_1,...\eta_k\}$.
+
+By **Sklar's Theorem**, The joint density $$f_{Y_t}(y_t|x_t,S_t=k)=\Pi_{j=1}^d \ f_{Y_{t,j}}(y_{t,j}|x_t,S_t=k)c(u_1,...,u_d;\eta_k)\ \ \ \ \ \ \ ...(1)$$
+
+where, $u_j=F_{Y_{t,j}}(y_{t,j}|x_t,S_t=k)$ and $c(.;\eta_k)=\displaystyle \frac{\partial^d C(.;\eta_k)}{\partial F_1...\partial F_d} \ \ \ \  .... (2)$
+
+If we use a particular form of the density function, then we have $$f_{Y_{t,j}}(y_{t,j}|x_t,S_t=k)=B_{l,\tau_j}(\sigma_{j,k})exp[-\omega_{l,\tau_j}(\frac{y_{t,j}-\mu_{t,j,k}}{\sigma_{j,k}})]$$
+$\mu_{t,j,k}$ : Location Parameter;
+$\sigma_{j,k}$$>0$ : Scale Parameter;
+$\omega_{l,\tau_j}(.)$ : Kernel function related to quantile/expectile loss function;
+$B_{l,\tau_j(\sigma_{j,k})}$ : Normalizing constant;
+
+Now, $\mu_{t,j,k}(\tau_j)=x_{t}B_{j,k}(\tau_j)$; $j=1,...,d$
+with $B_{j,k}(\tau_j)$ being a $p$-dimensional state-specific regression parameters that assumes one of the values $\{B_{j,1}(\tau_j),...,B_{j,K}(\tau_j)\}$ depending on the outcome of the Markov Chain $S_t$.
+The above equations define the proposed **Copula Quantile Hidden Markov Model** when $l=1$ and **Copula Expectile Hidden Markov Model** when $l=2$.
+The distribution functions of Gaussian and t copulas can be written as:
+
+$$C^G(\boldsymbol{u},\Omega^\Phi)=\Phi_d(\Phi^{-1}(u_1),...,\Phi^{-1}(u_d);\Omega^\Phi)$$
+
+$$C^t(\boldsymbol{u},\Omega^\Psi,\nu)=\Psi_d(\Psi^{-1}(u_1;\nu),...,\Psi^{-1}(u_d;\nu);\Omega^\Psi,\nu)$$
+
+where, $\Phi_d$ and $\Psi_d$ denote the joint distribution functions of $d$-variate normal and t distribution with correlation matrices $\Omega^\Phi$ and $\Omega^\Psi$ respectively. $\Phi^{-1}$ and $\Psi^{-1}$ are the inverse distribution functions of univariate standard distributions. We impose $\nu>2$ on the degrees of freedom of $t$ copula.
+
+# Parameter Estimation:
+
+For ease of notation, hereinafter we will not use the vector $\boldsymbol{\tau}$ representing the quantile(expectile) indices, yet all model parameters are allowed to depend on it.
+
+Let, $\boldsymbol{\theta}=(\beta_1,...,\beta_K,\sigma_1,...,\sigma_K,\pi,\Pi,\eta_1,...,\eta_K)$: Vector of all model parameters.
+
+For Gaussian Copula, $\eta_k$$=(\Omega_k^\Phi)$ and For $t$ Copula, $\eta_k$$=(\Omega_k^\Psi,\nu_k)$, k = 1,2,...,K
+
+The complete log-likelihood function of the model is defined as:
+
+$l_c(\theta)=\sum_{k=1}^K log\pi_k + \sum_{t=1}^T\sum_{k=1}^K\sum_{j=1}^K \xi_t(j,k)log\pi_{k|j} + \sum_{t=1}^T\sum_{k=1}^K\gamma_t(k)logf_{Y_t}(y_t|x_t,S_t=k)$
+
+where, $\gamma_t(k)= \begin{cases}\text{1,} &\quad\text{if the latent process is in state k at occasion t}\\\text{0,} &\quad\text{otherwise}\\\end{cases}$
+
+$\xi_t(j,k)= \begin{cases}\text{1,} &\quad\text{if the process is in state j in time t-1 and in state k in time t}\\\text{0,} &\quad\text{otherwise}\\\end{cases}$
+
+To estimate the model parameters **EM Algorithm** is used. From the E-step of the algorithm the *surrogate function* is given by - 
+
+$$Q(\theta|\theta^{(h)}) = \sum_{k=1}^K \gamma_1^{(h)}(k)log\ \pi_k + \sum_{t=1}^T \sum_{k = 1}^K \sum_{j=1}^K \xi_i^{(h)}(j,k)log \ \pi_{k|j} + \sum_{t=1}^T \sum_{k = 1}^K \gamma_t^{(h)}(k)log f_{Y_t}(y_t|x_t,S_t=k)$$
+Where, $\gamma_t^{(h)}(k)$ and $\xi_i^{(h)}(j,k)$ are quantities depending upon *forward* and *backward* probabilities. Such quantities can be effectively find out using *Forward-Backward* algorithm. $f_{Y_t}$ will change, depending upon CQHMM and CEHMM. The final estimates of model parameters are obtained by maximizing $Q(\theta|\theta^{(h)})$.
+The E and M steps are alternated until convergence and typically a threshold of $10^{-6}$ works well. The initial choice of parameters $(\beta_{j,k}^{(0)},\sigma_{j,k}^{(0)},\nu_k^{(0)}$ etc$)$ are done using *multiple random starts strategy with different starting partition*. 
+
+# Application:
+
+They have conducted a **simulation study** to evaluate the performance of the proposed CQHMM and CEHMM via simulated data under different scenarios. They assessed the ability *to recover true state partitions* using the Adjusted Rand Index (ARI). For T = 500 and T = 1000 sample sizes, they observed that the CQHMM demonstrated strong performance in estimating state partitions. The copula model with Gaussian and t errors outperformed the skew-t case. Results were slightly better at median quantiles. When increasing the sample size to T = 1000, results improved. The CEHMM also achieved excellent performance in estimating state partitions, with similar performance for different error distributions. Increasing the sample size improved results. In summary, both models successfully recovered true states and parameters across various distributions and copula settings.
+ 
+```{r,out.width='75%',fig.align='center',echo=FALSE,fig.cap="From left to right, box-plots of ARI for the posterior probabilities for Gaussian (red) and skew-t (blue) distributed errors with T = 500 and T = 1000."}
+knitr::include_graphics("C:/Users/User/OneDrive/Pictures/Screenshots/crypto2.png")
+```
+ 
+ 
+In the empirical application, the study selected a two-state model with a t copula to analyze cryptocurrency returns.Correlation dynamics demonstrated higher correlations during low volatility states, with **Bitcoin, Ethereum, and Litecoin** showing strong interconnections, while Ripple displayed distinct behavior. These findings provide valuable insights into the nuanced and evolving nature of the cryptocurrency-market relationship.
+
+```{r,out.width='75%',fig.align='center',echo=FALSE,fig.cap="Cryptocurrencies daily prices (top) and log return (bottom) series. Vertical dashed lines indicate globally relevant events in the financial markets that occurred in 2017,12; 2020,03; 2020,11; and 2022,02. Prices are multiplied by a constant to have a similar scale."}
+knitr::include_graphics("C:/Users/User/OneDrive/Pictures/Screenshots/crypto1.png")
+```
+
+# Conclusion:
+
+In the evolving landscape of cryptocurrencies and their interaction with traditional financial assets, this study offers valuable insights on their **complex relationships** under varying market conditions. The research combines theoretical advancements, utilizing **hidden Markov regression models and state-dependent elliptical copulas**, with practical analyses of cryptocurrency returns and their associations with global market indices. The findings emphasize the increasing interrelation between cryptocurrencies and traditional assets, particularly in extreme market scenarios, highlighting the importance of *S&P500, S&P Treasury Bond, and Gold* during both bearish and bullish periods. These results align with existing literature and provide a foundation for further research. Future research could extend these methods to **hidden semi-Markov models** and address **over-parameterization** challenges in **high-dimensional settings**.
+
+# References:
+
+* [Quantile and expectile copula-based hidden Markov regression models for the analysis of the cryptocurrency market](https://arxiv.org/abs/2307.06400)
+
+* [Podcast on Crypto Market 1](https://youtu.be/U9n8w4bxJ0k?si=fBcu6SR_EDLgPa1C)
+
+* [Podcast on Crypto Market 2](https://youtu.be/qeMmxq0MT6g?si=XYwO5uwYycvFU9_-)
+
+* [Hidden Markov Models](https://web.stanford.edu/~jurafsky/slp3/A.pdf)
+
+* [Finite mixtures of quantile and M quantile regression models](https://link.springer.com/article/10.1007/s11222-016-9638-1)
+
+* [Analysing Cryptocurrency Returns](https://web.uniroma1.it/memotef/sites/default/files/allegati/B.Foroni_L.Merlo_L.Petrella_GdR2023_Day1.pdf)
+
+# Appendix:
+
+This section briefly introduces univariate quantile and expectile regressions as flexible alternatives for analyzing continuous response variables. Quantile regression, an extension of median regression, and expectile regression, an asymmetric least-squares estimation for mean regression, offer a comprehensive view of the conditional distribution beyond traditional mean-focused models. Both quantiles and expectiles are part of the broader class of generalized quantiles, optimizing asymmetric $l$-power loss functions, providing a robust framework for capturing various aspects of conditional distributions. Formally, let $\tau \in (0,1)$ and consider the following asymmetric loss function
+
+$$\omega_{l,\tau}(u) = |u|^l \ .|\tau - I(u < 0)|,\ u \in R$$
+Where, $I(.)$ denotes the indicator function
+Given a set of covariates $\boldsymbol{X = x}$,it is easy to see that when $l=1$, the conditional quantile of order $\tau$ of a continuous response $Y$ is defined as
+
+$$q_x(\tau) = \underset{m \in R}{arg \ min}E[\omega_{1,\tau}(Y - m_x(\tau))]$$
+and for $l = 2$, the $\tau$-th conditional expectile of $Y$ is defined as
+
+$$q_x(\tau) = \underset{m \in R}{arg \ min}E[\omega_{2,\tau}(Y - m_x(\tau))]$$
+We know that, Finding MLE of location parameter Normal Distribution is equivalent to minimizing squared error loss. A similar analogy can be drawn between the loss function $\omega_{l,\tau}(.)$ and a probability distribution. Essentially the pdf is given by - 
+
+$$f(y;\mu,\sigma,\tau)=B_{l,\tau}(\sigma)exp[-\omega_{l,\tau}(\frac{y-\mu}{\sigma})]$$
+where $\mu \in R$ is a location parameter, $\sigma > 0$ is a scale parameter and $B_{l,\tau}(\sigma)$ is a normalizing constant that ensures the pdf integrates to one. for $l = 1$, the pdf is for *Asymmetric Laplace Distribution* and for $l=2$ the pdf is for *Asymmetric Normal Distribution*. 
+ 
+
+
+
+
+
