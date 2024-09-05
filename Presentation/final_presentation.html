@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>A Brief Overview of</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Shrayan Roy" />
+    <meta name="date" content="2024-06-09" />
+    <script src="libs/header-attrs/header-attrs.js"></script>
+    <link href="libs/panelset/panelset.css" rel="stylesheet" />
+    <script src="libs/panelset/panelset.js"></script>
+    <link rel="stylesheet" href="design_PCM.css" type="text/css" />
+    <link rel="stylesheet" href="fonts.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+.title[
+# A Brief Overview of
+]
+.subtitle[
+## Bayesian Image Reconstruction
+]
+.author[
+### Shrayan Roy
+]
+.institute[
+### Indian Statistical Institute, Kolkata
+]
+.date[
+### 06/09/2024
+]
+
+---
+
+
+
+
+
+
+&lt;style type="text/css"&gt;
+.remark-slide-number {
+  display: none;
+}
+&lt;/style&gt;
+
+# Introduction
+
+* We will understand the problem of Image Degradation.
+
+* We will understand image Reconstruction as a High Dimensional Problem.
+
+* We will see how motivation to use Bayesian Methods comes naturally.
+
+* In this context choice of priors becomes very important.
+ 
+---
+
+# Image as Data
+
+* It is a visual representation, created by capturing or generating patterns of light and color. 
+
+* Image is 3D array of pixels, each with red, green, and blue color values lying between 0 and 1. 
+
+&lt;img src="pre_img/img1.jpg" width="40%" style="display: block; margin: auto;" /&gt;
+
+* We will discuss methods for Grayscale Images i.e. 2D array of pixels. 
+
+* Discussed methods can be generalized for RGB images also.
+
+---
+
+# Image Degradation
+
+&lt;!-- To reconstruct something, we obviously need to understand the mechanism  of  construction , may be add some svg in this line--&gt; 
+
+* Degradation of photographic images is a common phenomenon.
+
+&lt;div class="figure" style="text-align: center"&gt;
+&lt;img src="pre_img/thinlens.png" alt="Figure: Thin Lens Model" width="50%" /&gt;
+&lt;p class="caption"&gt;Figure: Thin Lens Model&lt;/p&gt;
+&lt;/div&gt;
+
+&lt;!-- * When light rays spread from a point source and hit the camera lens, they should ideally refract and converge on the corresponding pixel of the original scene. --&gt;
+
+* Due to lack of focus or due motion of the subject or due to camera shake, refracted rays spread out over neighboring pixels as well.
+
+* This spreading pattern is called the Point Spread Function (PSF) or Blur Kernel.
+
+---
+
+# Image Degradation
+
+&lt;!-- Add example of blurry image--&gt;
+
+&lt;div class="figure" style="text-align: center"&gt;
+&lt;img src="pre_img/blur_img.png" alt="Figure: Real life example of blur images" width="60%" /&gt;
+&lt;p class="caption"&gt;Figure: Real life example of blur images&lt;/p&gt;
+&lt;/div&gt;
+
+---
+
+# Image Degradation
+
+* Under-resolution occurs when image lacks sufficient pixel density or detail, resulting in a blurry image.
+
+&lt;!-- Add example of under-resolution image--&gt;
+
+&lt;div class="figure" style="text-align: center"&gt;
+&lt;img src="pre_img/low_high_reso.jpg" alt="Figure: High and Low Resolution Image" width="75%" /&gt;
+&lt;p class="caption"&gt;Figure: High and Low Resolution Image&lt;/p&gt;
+&lt;/div&gt;
+
+---
+
+# Image Degradation
+
+* Image reconstruction is needed to recover the original image.
+
+* Effective solutions depend upon the context of the problem.
+
+* Depending upon type of degradation, different methodologies are available.
+
+---
+
+# Mathematical Formulation
+
+* Most of Image reconstruction tasks are inverse problems and can be viewed as linear error minimization problem.
+
+* We can model these using linear model -  
+
+  `$$\text{vec}(\boldsymbol{b}) = A \ \text{vec}(\boldsymbol{l}) \ + \ \text{vec}( \boldsymbol{\epsilon})$$`
+Where,
+
+  * `\(\boldsymbol{l}\)` is unknown `\(m\times n\)` latent image matrix which we want to estimate.
+  
+  * `\(\boldsymbol{b}\)` is observed `\(M \times N\)` image matrix, usually smaller than `\(\boldsymbol{l}\)`.
+  
+  * `\(A\)` is `\(MN\times mn\)` matrix of linear mapping associated with image degradation.
+  
+  * `\(\boldsymbol{\epsilon}\)` is an `\(M \times N\)` matrix of noise.
+  
+  * `\(\text{vec(.)}\)` denotes the corresponding vectorized form.
+
+---
+
+# Mathematical Formulation
+
+* Assuming IID Gaussian distribution of noise `\(\boldsymbol{\epsilon}\)` and `\(\boldsymbol{A}\)` is known, we have OLS problem with normal equations
+
+`$$A^{T}A \ \text{vec}(\boldsymbol{\hat{l}}) = A^T \ \text{vec}(b)$$`
+
+* The design matrix `\(A\)` is column rank deficit `\(\implies\)` infinite solutions for `\(\boldsymbol{l}\)`.
+
+&lt;!-- add levin presentation example &gt; When you look at these two solutions it’s very clear to you which of them is good and which of them isn’t, and this is because you know that the original signal was an image and you have in mind a very strong prior on what an image should look like.
+ --&gt;
+
+
+&lt;div class="figure" style="text-align: center"&gt;
+&lt;img src="pre_img/two_soln.png" alt="Figure: Image Recovery is ill-possed problem (From Levin et al.)" width="45%" /&gt;
+&lt;p class="caption"&gt;Figure: Image Recovery is ill-possed problem (From Levin et al.)&lt;/p&gt;
+&lt;/div&gt;
+
+---
+
+# Mathematical Formulation
+
+* Number of observations `\(MN\)` is very large compared number of parameters `\(\implies\)` **ill-posed problem**.
+
+* This is very common problem in regression i.e. `\(p &gt; n\)`.
+
+* Use Ridge regression, which can be viewed as Bayesian Approach and assumes IID Gaussian Prior for each element of `\(\boldsymbol{l}\)`.
+
+* This is not a meaningful prior in the context of image processing and choosing appropriate one is important.
+
+---
+
+# Prior elicitation for Natural Images
+
+* By **natural**, we refer to typical scenes captured in amateur digital photography, excluding specialized contexts like astronomy or satellite imaging.
+
+* The prior family used is motivated from the observation that the distribution of image gradients have a **sharp peak near zero** and and relatively **heavier tails** than the Gaussian distribution and Laplace distribution.
+
+&lt;div class="figure" style="text-align: center"&gt;
+&lt;img src="pre_img/prior1.png" alt="Figure: Eight sharp images and their density plot of horizontal gradients" width="75%" height="30%" /&gt;
+&lt;p class="caption"&gt;Figure: Eight sharp images and their density plot of horizontal gradients&lt;/p&gt;
+&lt;/div&gt;
+
+---
+
+# Prior elicitation for Natural Images
+
+* A useful parametric family to model this is the so called **Hyper-Laplacian Distribution** given by 
+
+`$$f_{\alpha}(z) = \frac{\alpha}{2\Gamma(\frac{1}{\alpha})}\text{exp}{(-|z|^{\alpha})}, z \in \mathbb{R} \ \ \text{and} \ \ \alpha &gt; 0$$`
+
+* Levin et al. used `\(\alpha = 0.8\)` and Zhu et al. used `\(\alpha = 2\)`  with IID assumption of image gradients.
+
+* Nandy (2021) showed that assumption of independent gradients is incorrect and suggested *simple AR process* to model it.
+
+---
+
+## Example
+
+&lt;!-- Antar sir image and show gradient matrices ---&gt;
+
+---
+
+# Prior elicitation for Natural Images
+
+* Model the dependence structure of latent image gradients using 2D AR model, i.e.
+
+  `$$\rho(\boldsymbol{x_{ij},x_{kl}}) = {\rho_1}^{|i-k|}{\rho_2}^{|j-l|}$$`
+Where,
+
+  * `\(\rho_1\)` is correlation along the direction of gradient.
+  
+  * `\(\rho_2\)` is correlation across the direction of gradient.
+  
+  * Based on empirical testing `\(\rho_1 = 0.3\)` and `\(\rho_2 = 0.6\)` is used.
+  
+* Image gradients can be decorrelated using convolution operator.
+
+* Assume **Hyper-Laplacian Distribution** on these decorrelated gradients.
+
+---
+
+# Image Deconvolution
+
+* Image is assumed to be distorted due to camera shake or lens imperfections or source being out of focus. 
+
+* Observed images are blurry in this case and can be viewed as **convolution** of original sharp image and Point Spread Function. 
+
+* The observed image `\(\boldsymbol{b}\)` is modeled as - 
+
+  `$$\boldsymbol{b} = \boldsymbol{k} \ \otimes \ \boldsymbol{l} \ + \ \boldsymbol{\epsilon}$$`
+Where,
+
+  * `\(\boldsymbol{k}\)` is an `\(m \times n\)` PSF / blur kernel.
+  
+  * `\(\boldsymbol{l}\)` is the `\((M + m) \times (N + n)\)` *true latent image* which we want to estimate.
+  
+  * `\(\otimes\)` denotes the *valid convolution* operator.
+
+---
+
+# Image Deconvolution
+
+* We can express this as linear model, where `\(A\)` is determined by `\(\boldsymbol{k}\)`.
+  
+ &lt;!-- * `\(A\)` is known depending on whether the blur kernel `\(\boldsymbol{k}\)` is known or not, A is determined by k --&gt;
+ 
+  `$$\text{vec}(\boldsymbol{b}) = A_{\boldsymbol{k}} \ \text{vec}(\boldsymbol{l}) \ + \ \text{vec}( \boldsymbol{\epsilon})$$`
+
+* Estimating both `\(\boldsymbol{l}\)` and `\(\boldsymbol{k}\)` together is called *Blind Deconvolution*.
+ 
+* If `\(\boldsymbol{k}\)` is known, we call it *Non-Blind Deconvolution*.
+
+---
+
+# Non-Blind Deconvolution
+
+* The blur kernel `\(\boldsymbol{k}\)` is completely known.
+
+  `$$\boldsymbol{b} = \boldsymbol{k} \ \otimes \ \boldsymbol{l} \ + \ \boldsymbol{\epsilon}$$`
+
+* Using MLE to find estimate of `\(\boldsymbol{l}\)` is equivalent to Ordinary Least Square Problem.
+
+`$$\hat{\boldsymbol{l}} = \underset{\boldsymbol{l}}{\text{argmax}} \ \text{log}\ l(\boldsymbol{b|l,k}) = \underset{\boldsymbol{l}}{\text{argmin}} \ ||b - \boldsymbol{k}\otimes \boldsymbol{l}||^2$$`
+
+* Assume prior on latent image and find posterior mode.
+
+* We assume IID prior on image gradients, i.e.
+
+  `$$\pi(\boldsymbol{l}) \propto \text{exp}(-\lambda\sum_{i}\sum_{k \ \in \ \{v,h\}} |\delta_k \otimes \boldsymbol{l})_i|^{\alpha})$$`
+Where,
+
+  * `\(\lambda &gt; 0\)` is a constant determining variance of prior distribution.
+  
+  * `\(\alpha\)` is determines power of Hyper-Laplacian distribution.(e.g. `\(\alpha = 2\)` for Gaussian prior) 
+
+&lt;!--
+
+* If we assume that `\(\boldsymbol{\epsilon} \sim \text{Normal}(0,\eta^2I)\)`, we can use MLE to find estimate of `\(\boldsymbol{l}\)`. 
+
+`$$\hat{\boldsymbol{l}} = \underset{\boldsymbol{l}}{\text{argmax}} \ \text{log}\ l(\boldsymbol{b|l,k}) = \underset{\boldsymbol{l}}{\text{argmin}} \ ||b - \boldsymbol{k}\otimes \boldsymbol{l}||^2$$`
+* But, this is again ordinary least square equation, which have infinitely many solutions as `\(p &gt; n\)`.
+
+`$$\hat{\boldsymbol{l}} = \underset{\boldsymbol{l}}{\text{argmin}} \ \boldsymbol{\text{vec}(l)}^TA_k^TA_k - 2\text{vec}(b)^TA_k\text{vec}(l)$$`
+* If we solve this in frequency domain (padding with zeros), we have - 
+
+`$$L_{\omega} = \frac{B_{\omega}}{K_{\omega}} \implies \boldsymbol{l} = \text{IDFT}(B \oslash K)$$`
+
+--&gt;
+---
+
+# Non-Blind Deconvolution
+
+* Assuming IID Gaussian distribution for noise gradient `\(\boldsymbol{n}\)`, the posterior density is given by
+
+`$$\pi(\boldsymbol{l}|\boldsymbol{b}) \propto \ l(\boldsymbol{b}|\boldsymbol{l})\ \pi(\boldsymbol{l})$$`
+
+* The Maximum a posteriori (MAP) estimate of `\(\boldsymbol{l}\)` is given by
+
+`$$\hat{\boldsymbol{l}} = \underset{\boldsymbol{l}}{\text{argmax}} \ \ l(\boldsymbol{b|l,k}) \pi(\boldsymbol{l})$$`
+* Which can be further expressed as
+
+`$$\hat{\boldsymbol{l}} = \underset{\boldsymbol{l}}{\text{argmin}} \ \ ||\text{vec}(\boldsymbol{b}) - A_k\text{vec}(\boldsymbol{l})||^2 + \lambda\sum_{i}\sum_{k \ \in \ \{v,h\}} |(\delta_k \otimes \boldsymbol{l})_i|^{\alpha}$$`
+
+---
+
+# Non-Blind Deconvolution
+
+* Using Nandy's prior instead of IID prior, we have 
+
+`$$\hat{\boldsymbol{l}} = \underset{\boldsymbol{l}}{\text{argmin}} \ \ ||\text{vec}(\boldsymbol{b}) - A_k\text{vec}(\boldsymbol{l})||^2 + \lambda\sum_{i}\sum_{k \ \in \ \{v,h\}} |(B_k\text{vec}(\boldsymbol{l}))_i|^{\alpha}$$`
+* `\(B_k\)` is determined by correlation parameters of Nandy's prior.
+
+* It boils down to system of linear equations of form `\(T_{k,x} x = b\)`.
+
+* An iterative re-weighted least squares scheme can be used to solve this equation.
+
+* Although the matrix `\(T_{k,x}\)` is sparse, it is still potentially large and evaluating it repeatedly is computationally extensive.
+
+* Levin et al. used conjugate gradient method, which calculates `\(T_{k,x} x\)` directly without calculating `\(T_{k,x}\)`.
+
+---
+
+# Blind Deconvolution
+
+* In this case `\(\boldsymbol{k}\)` is also unknown `\(\implies\)` more ill possed.
+
+* Finding both `\(\boldsymbol{k}\)` and `\(\boldsymbol{l}\)` together can give rise to trivial solutions.
+
+`$$\boldsymbol{l} = \boldsymbol{b} \ \text{and} \ \boldsymbol{k} = 1$$`$
+
+* First estimate `\(\boldsymbol{k}\)` and based on that estimate `\(\boldsymbol{l}\)`.
+
+* We first express the blurring model in terms of image gradients.
+
+`$$\boldsymbol{\delta_h}\otimes\boldsymbol{b} = \boldsymbol{\delta_h} \otimes(\boldsymbol{k} \ \otimes \ \boldsymbol{l}) \ + \ (\boldsymbol{\delta_h}\otimes \boldsymbol{\epsilon}) =  k \otimes(\boldsymbol{\delta_h} \ \otimes \ \boldsymbol{l}) \ + \ (\boldsymbol{\delta_h}\otimes \boldsymbol{\epsilon})$$`
+
+`$$\boldsymbol{\delta_v}\otimes\boldsymbol{b} = \boldsymbol{\delta_v} \otimes(\boldsymbol{k} \ \otimes \ \boldsymbol{l}) \ + \ (\boldsymbol{\delta_v}\otimes \boldsymbol{\epsilon}) =  k \otimes(\boldsymbol{\delta_v} \ \otimes \ \boldsymbol{l}) \ + \ (\boldsymbol{\delta_v}\otimes \boldsymbol{\epsilon})$$`
+
+* We will use a generic form of these equations, given by
+
+`$$\boldsymbol{y} = \boldsymbol{k} \ \otimes \ \boldsymbol{x} \ + \ \boldsymbol{n}$$`
+
+---
+
+# Blind Deconvolution
+
+* Using Convolution Theorem for *Discrete Fourier Transform* we have
+
+`$$\boldsymbol{Y} = \boldsymbol{K} \odot \boldsymbol{X} + \boldsymbol{N}$$`
+`\(\ \ \  \ \ \ \ \ \text{}\)` Where, `\(\boldsymbol{Y,K,X}\)` and `\(\boldsymbol{N}\)` are the *Discrete Fourier Transform*'s of `\(\boldsymbol{y,k,x}\)` and `\(\boldsymbol{n}\)` respectively.
+
+* Then, `\(\forall \ \boldsymbol{\omega} = (\omega_1,\omega_2)\)` we have `\(\boldsymbol{Y_{\omega} = K_{\omega}X_{\omega} + N_{\omega}}\)`
+
+* For Nandy's prior it can be shown that 
+
+`$$|\boldsymbol{Y_{\omega}}|^2 \sim \text{Exp}(\lambda_\omega = \frac{1}{\sigma^2|K_\omega|^2 g_{\omega} + \eta^2 h_{\omega}}) \ \ \ \forall \omega$$`
+
+* If we assume `\(\rho_1 = 0\)` and `\(\rho_2 = 0\)`, then `\(g_{\omega} = 1 \ \forall{\omega}\)`.
+
+* Based on this we can find MLE of `\(\hat{K_{omega}}\)` as
+
+`$$\hat{K_{\omega}} = \frac{1}{\sigma}\sqrt{\text{max}(0,|Y_{\omega}|^2 - \eta^2h_{\omega})/g_{\omega}}$$`
+
+---
+
+# References
+
+* Brian A. Barsky, Daniel R. Horn, and Klein. “Camera Models and Optical Systems Used in Computer Graphics: Part I, Object-Based Techniques”. In: Lecture Notes in Computer Science. Springer Berlin Heidelberg, 2003. url: http://dx.doi.org/10.1007/3-540-44842X_26.
+
+* Kaustav Nandy. “Locally Dependent Natural Image Priors for Non-blind and Blind Image Deconvolution”. PhD thesis. Indian Statistical Institute, 2021. url: 
+https://digitalcommons.isical.ac.in/doctoral-theses/7/
+
+* Deepayan Sarkar and Kaustav Nandy. rip: Image Processing in R. New Delhi, India, 2021. url: https://github.com/deepayan/rip.
+
+* William Hadley Richardson. “Bayesian-Based Iterative Method of Image Restoration". In: (1972). doi: http://dx.doi.org/10.1145/1276377.127646
+
+* J. Yang, J. Wright, T. S. Huang, and Y. Ma. Image super-resolution via sparse representation. IEEE Transactions on Image Processing, 19(11):2861–2873, 2010.
+
+* Anat Levin et al. “Image and depth from a conventional camera with a coded aperture”. In: ACM transactions on graphics (TOG) 26.3 (2007), 70–es. url: http://dx.doi.org/10.1145/1276377.1276464
+
+---
+
+# Appendix
+
+.panelset[
+.panel[.panel-name[Objects Closer]
+
+* For objects closer to the camera than the plane of focus
+
+&lt;img src="pre_img/d2.png" width="80%" style="display: block; margin: auto;" /&gt;
+
+]
+
+.panel[.panel-name[Objects Farther]
+
+* For objects farther from the camera than the plane of focus
+
+&lt;img src="pre_img/d1.png" width="75%" style="display: block; margin: auto;" /&gt;
+
+]
+]
+
+---
+
+class: center, middle
+background-size: cover
+
+# Thank You
+
+
+
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false,
+"ratio": "16:9"
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+// add `data-at-shortcutkeys` attribute to <body> to resolve conflicts with JAWS
+// screen reader (see PR #262)
+(function(d) {
+  let res = {};
+  d.querySelectorAll('.remark-help-content table tr').forEach(tr => {
+    const t = tr.querySelector('td:nth-child(2)').innerText;
+    tr.querySelectorAll('td:first-child .key').forEach(key => {
+      const k = key.innerText;
+      if (/^[a-z]$/.test(k)) res[k] = t;  // must be a single letter (key)
+    });
+  });
+  d.body.setAttribute('data-at-shortcutkeys', JSON.stringify(res));
+})(document);
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
